@@ -1,13 +1,13 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.models.project import Project
+from app.models.project import Project, ProjectCreate
 from app.services.storage import load_project, save_project
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.post("", response_model=Project, status_code=status.HTTP_201_CREATED)
-def create_project(project: Project) -> Project:
+def create_project(project: ProjectCreate) -> Project:
     return save_project(project)
 
 

@@ -21,10 +21,12 @@ export interface CameraDto {
 }
 
 export interface ProjectDto {
-  id?: string;
+  id: string;
   name: string;
   scale: ScaleState | null;
   cameras: CameraDto[];
   walls: SegmentDto[];
   doors: SegmentDto[];
 }
+
+export type ProjectCreateDto = Omit<ProjectDto, "id">;

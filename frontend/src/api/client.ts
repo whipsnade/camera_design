@@ -1,4 +1,10 @@
-import type { CameraDto, ProjectDto, ScaleState, SegmentDto } from "../features/workbench/types";
+import type {
+  CameraDto,
+  ProjectCreateDto,
+  ProjectDto,
+  ScaleState,
+  SegmentDto
+} from "../features/workbench/types";
 
 const API_PREFIX = "/api";
 
@@ -32,7 +38,7 @@ export function parseProjectDto(value: unknown): ProjectDto {
 
   const { id, name, scale, cameras, walls, doors } = value;
 
-  if (id !== undefined && typeof id !== "string") {
+  if (typeof id !== "string") {
     throw new Error("Invalid project id");
   }
 
@@ -64,13 +70,21 @@ async function requestProject(path: string, init: RequestInit): Promise<ProjectD
   return parseProjectDto(await response.json());
 }
 
-export function createProject(project: ProjectDto): Promise<ProjectDto> {
+export function createProject(project: ProjectCreateDto): Promise<ProjectDto> {
+  const payload: ProjectCreateDto = {
+    name: project.name,
+    scale: project.scale,
+    cameras: project.cameras,
+    walls: project.walls,
+    doors: project.doors
+  };
+
   return requestProject("/projects", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(project)
+    body: JSON.stringify(payload)
   });
 }
 

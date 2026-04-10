@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
-from app.models.project import Project
+from app.models.project import Project, ProjectCreate
 
 
 def get_projects_data_dir() -> Path:
@@ -12,12 +12,21 @@ def get_projects_data_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "data" / "projects"
 
 
-def save_project(project: Project) -> Project:
-    data_dir = get_projects_data_dir()
+def get_project_file_path(project_id: str) -> Path:
+    data_dir = get_projects_data_dir().resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
+    project_path = (data_dir / f"{project_id}.json").resolve()
 
-    persisted_project = project.model_copy(update={"id": project.id or uuid4().hex})
-    project_path = data_dir / f"{persisted_project.id}.json"
+    if data_dir not in project_path.parents:
+        raise ValueError("Project path escapes data directory")
+
+    return project_path
+
+
+def save_project(project: ProjectCreate) -> Project:
+    persisted_project = Project(id=uuid4().hex, **project.model_dump())
+    project_path = get_project_file_path(persisted_project.id)
+
     project_path.write_text(
         persisted_project.model_dump_json(indent=2),
         encoding="utf-8",
@@ -27,7 +36,11 @@ def save_project(project: Project) -> Project:
 
 
 def load_project(project_id: str) -> Project | None:
-    project_path = get_projects_data_dir() / f"{project_id}.json"
+    try:
+        project_path = get_project_file_path(project_id)
+    except ValueError:
+        return None
+
     if not project_path.exists():
         return None
     return Project.model_validate_json(project_path.read_text(encoding="utf-8"))

@@ -25,10 +25,17 @@ class Camera(BaseModel):
     id: str | None = None
 
 
-class Project(BaseModel):
-    id: str | None = None
+class ProjectPayload(BaseModel):
     name: str
     scale: ScaleState | None = None
     cameras: list[Camera]
     walls: list[Segment]
     doors: list[Segment]
+
+
+class ProjectCreate(ProjectPayload):
+    pass
+
+
+class Project(ProjectPayload):
+    id: str
