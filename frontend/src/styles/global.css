@@ -21,7 +21,7 @@ body,
   min-height: 100vh;
 }
 
-main {
+.workbench-layout {
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(280px, 1fr) minmax(180px, 240px);
   gap: 16px;
@@ -29,8 +29,7 @@ main {
   padding: 24px;
 }
 
-main > aside,
-main > section {
+.workbench-panel {
   border: 1px solid rgba(19, 34, 56, 0.12);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.86);
@@ -38,12 +37,12 @@ main > section {
   padding: 24px;
 }
 
-main > section {
+.workbench-panel--canvas {
   min-height: 60vh;
 }
 
 @media (max-width: 900px) {
-  main {
+  .workbench-layout {
     grid-template-columns: 1fr;
   }
 }
