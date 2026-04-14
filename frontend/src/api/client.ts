@@ -92,7 +92,9 @@ function parseRecognitionConfidenceItem(value: unknown): RecognitionConfidenceIt
 function parseSegment(value: unknown): SegmentDto {
   if (
     !isObject(value) ||
-    (typeof value.id !== "string" && typeof value.id !== "undefined") ||
+    (typeof value.id !== "string" &&
+      typeof value.id !== "undefined" &&
+      value.id !== null) ||
     !isObject(value.start) ||
     !isObject(value.end)
   ) {

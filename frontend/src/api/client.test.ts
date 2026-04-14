@@ -131,6 +131,7 @@ test("recognizePlan posts the uploaded drawing and parses suggestions", async ()
         scale: { pixelsPerMeter: 40, source: "auto" },
         walls: [
           {
+            id: null,
             start: { x: 20, y: 20 },
             end: { x: 220, y: 20 }
           }
@@ -169,5 +170,6 @@ test("recognizePlan posts the uploaded drawing and parses suggestions", async ()
   );
   expect(result.scale?.source).toBe("auto");
   expect(result.walls).toHaveLength(1);
+  expect(result.walls[0].id).toBeUndefined();
   expect(result.confidenceItems).toHaveLength(1);
 });
