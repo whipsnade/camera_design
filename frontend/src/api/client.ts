@@ -1,7 +1,12 @@
 import type {
+  CameraModeDto,
   CameraDto,
+  LayoutCameraDto,
+  LayoutResultDto,
+  LayoutSolveRequestDto,
   ProjectCreateDto,
   ProjectDto,
+  PointDto,
   ScaleState,
   SegmentDto
 } from "../features/workbench/types";
@@ -28,6 +33,57 @@ function parseScaleState(value: unknown): ScaleState | null {
   return {
     pixelsPerMeter: value.pixelsPerMeter,
     source: value.source
+  };
+}
+
+function parsePoint(value: unknown): PointDto {
+  if (!isObject(value) || typeof value.x !== "number" || typeof value.y !== "number") {
+    throw new Error("Invalid point");
+  }
+
+  return { x: value.x, y: value.y };
+}
+
+function parseCameraMode(value: unknown): CameraModeDto {
+  if (value !== "directional" && value !== "panoramic") {
+    throw new Error("Invalid camera mode");
+  }
+
+  return value;
+}
+
+function parseLayoutCameraDto(value: unknown): LayoutCameraDto {
+  if (!isObject(value) || typeof value.id !== "string" || !Array.isArray(value.coverage_polygon)) {
+    throw new Error("Invalid layout camera");
+  }
+
+  return {
+    id: value.id,
+    mode: parseCameraMode(value.mode),
+    position: parsePoint(value.position),
+    directionDeg: typeof value.direction_deg === "number" ? value.direction_deg : null,
+    coveragePolygon: value.coverage_polygon.map(parsePoint)
+  };
+}
+
+export function parseLayoutResultDto(value: unknown): LayoutResultDto {
+  if (
+    !isObject(value) ||
+    typeof value.recommended_camera_count !== "number" ||
+    typeof value.coverage_ratio !== "number" ||
+    !Array.isArray(value.blind_spots) ||
+    !Array.isArray(value.overlap_hints) ||
+    !Array.isArray(value.cameras)
+  ) {
+    throw new Error("Invalid layout payload");
+  }
+
+  return {
+    recommendedCameraCount: value.recommended_camera_count,
+    coverageRatio: value.coverage_ratio,
+    blindSpots: value.blind_spots.map(parsePoint),
+    overlapHints: value.overlap_hints.map(parsePoint),
+    cameras: value.cameras.map(parseLayoutCameraDto)
   };
 }
 
@@ -92,4 +148,27 @@ export function getProject(projectId: string): Promise<ProjectDto> {
   return requestProject(`/projects/${projectId}`, {
     method: "GET"
   });
+}
+
+export async function solveLayout(request: LayoutSolveRequestDto): Promise<LayoutResultDto> {
+  const response = await fetch(`${API_PREFIX}/layout/solve`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      scale: request.scale,
+      coverage_distance_m: request.coverageDistanceM,
+      camera_modes: request.cameraModes,
+      walls: request.walls,
+      doors: request.doors,
+      region_polygon: request.regionPolygon
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Layout request failed with status ${response.status}`);
+  }
+
+  return parseLayoutResultDto(await response.json());
 }

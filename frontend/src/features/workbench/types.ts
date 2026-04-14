@@ -20,6 +20,33 @@ export interface CameraDto {
   [key: string]: unknown;
 }
 
+export type CameraModeDto = "directional" | "panoramic";
+
+export interface LayoutCameraDto {
+  id: string;
+  mode: CameraModeDto;
+  position: PointDto;
+  directionDeg: number | null;
+  coveragePolygon: PointDto[];
+}
+
+export interface LayoutResultDto {
+  recommendedCameraCount: number;
+  coverageRatio: number;
+  blindSpots: PointDto[];
+  overlapHints: PointDto[];
+  cameras: LayoutCameraDto[];
+}
+
+export interface LayoutSolveRequestDto {
+  scale: ScaleState;
+  coverageDistanceM: number;
+  cameraModes: CameraModeDto[];
+  walls: SegmentDto[];
+  doors: SegmentDto[];
+  regionPolygon: PointDto[];
+}
+
 export interface ProjectDto {
   id: string;
   name: string;

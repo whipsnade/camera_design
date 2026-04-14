@@ -7,6 +7,7 @@ interface InspectorPanelProps {
   selected: SelectedEntity | null;
   wall: SegmentDto | null;
   onCameraChange: (next: { x: number; y: number }) => void;
+  onCameraLockToggle: () => void;
 }
 
 const inputStyle = {
@@ -38,7 +39,8 @@ export function InspectorPanel({
   door,
   selected,
   wall,
-  onCameraChange
+  onCameraChange,
+  onCameraLockToggle
 }: InspectorPanelProps) {
   const activeSegment = selected?.type === "wall" ? wall : selected?.type === "door" ? door : null;
 
@@ -93,6 +95,23 @@ export function InspectorPanel({
         style={inputStyle}
         value={camera ? "" : activeSegment?.end.y ?? ""}
       />
+      {camera ? (
+        <button
+          aria-label="锁定当前相机"
+          onClick={onCameraLockToggle}
+          style={{
+            width: "100%",
+            borderRadius: 12,
+            border: "1px solid rgba(19, 34, 56, 0.18)",
+            padding: "10px 12px",
+            background: camera.locked ? "rgba(15, 118, 110, 0.92)" : "rgba(244, 247, 252, 0.95)",
+            color: camera.locked ? "#f8fafc" : "#132238"
+          }}
+          type="button"
+        >
+          {camera.locked ? "已锁定" : "锁定相机"}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,11 @@
-import type { CameraDto, PointDto, ScaleState, SegmentDto } from "../types";
+import type {
+  CameraDto,
+  CameraModeDto,
+  LayoutResultDto,
+  PointDto,
+  ScaleState,
+  SegmentDto
+} from "../types";
 
 export type DrawMode = "select" | "wall" | "door" | "camera";
 export type SelectedEntityType = "wall" | "door" | "camera";
@@ -7,6 +14,9 @@ export interface ManualCamera extends CameraDto {
   id: string;
   x: number;
   y: number;
+  locked: boolean;
+  mode: CameraModeDto;
+  source: "manual" | "solver";
 }
 
 export interface UploadAsset {
@@ -26,6 +36,9 @@ export interface ProjectState {
   cameras: ManualCamera[];
   walls: SegmentDto[];
   doors: SegmentDto[];
+  coverageDistanceM: number;
+  layoutResult: LayoutResultDto | null;
+  layoutStatus: "idle" | "loading" | "ready" | "error";
   upload: UploadAsset | null;
   drawMode: DrawMode;
   draftPoint: PointDto | null;
@@ -34,10 +47,18 @@ export interface ProjectState {
 
 export type ProjectAction =
   | { type: "project/calibrationSet"; payload: ScaleState }
+  | { type: "project/coverageDistanceSet"; payload: number }
   | { type: "project/wallAdded"; payload: SegmentDto }
   | { type: "project/doorAdded"; payload: SegmentDto }
   | { type: "project/cameraAdded"; payload: ManualCamera }
   | { type: "project/cameraUpdated"; payload: { id: string; x: number; y: number } }
+  | { type: "project/cameraLockToggled"; payload: { id: string } }
+  | { type: "project/layoutRequestStarted" }
+  | {
+      type: "project/layoutRequestSucceeded";
+      payload: { cameras: ManualCamera[]; layoutResult: LayoutResultDto };
+    }
+  | { type: "project/layoutRequestFailed" }
   | { type: "project/uploadSet"; payload: UploadAsset | null }
   | { type: "project/modeSet"; payload: DrawMode }
   | { type: "project/draftPointSet"; payload: PointDto | null }
@@ -50,6 +71,9 @@ export const initialState: ProjectState = {
   cameras: [],
   walls: [],
   doors: [],
+  coverageDistanceM: 8,
+  layoutResult: null,
+  layoutStatus: "idle",
   upload: null,
   drawMode: "wall",
   draftPoint: null,
@@ -63,6 +87,8 @@ export function projectReducer(
   switch (action.type) {
     case "project/calibrationSet":
       return { ...state, scale: action.payload };
+    case "project/coverageDistanceSet":
+      return { ...state, coverageDistanceM: action.payload };
     case "project/wallAdded":
       return {
         ...state,
@@ -87,7 +113,44 @@ export function projectReducer(
         ...state,
         cameras: state.cameras.map((camera) =>
           camera.id === action.payload.id ? { ...camera, ...action.payload } : camera
+        ),
+        layoutResult: state.layoutResult
+          ? {
+              ...state.layoutResult,
+              cameras: state.layoutResult.cameras.map((camera) =>
+                camera.id === action.payload.id
+                  ? {
+                      ...camera,
+                      position: { x: action.payload.x, y: action.payload.y }
+                    }
+                  : camera
+              )
+            }
+          : null
+      };
+    case "project/cameraLockToggled":
+      return {
+        ...state,
+        cameras: state.cameras.map((camera) =>
+          camera.id === action.payload.id ? { ...camera, locked: !camera.locked } : camera
         )
+      };
+    case "project/layoutRequestStarted":
+      return {
+        ...state,
+        layoutStatus: "loading"
+      };
+    case "project/layoutRequestSucceeded":
+      return {
+        ...state,
+        cameras: action.payload.cameras,
+        layoutResult: action.payload.layoutResult,
+        layoutStatus: "ready"
+      };
+    case "project/layoutRequestFailed":
+      return {
+        ...state,
+        layoutStatus: "error"
       };
     case "project/uploadSet":
       return {
@@ -131,6 +194,17 @@ export function projectReducer(
       return {
         ...state,
         cameras: state.cameras.filter((camera) => camera.id !== state.selected?.id),
+        layoutResult: state.layoutResult
+          ? {
+              ...state.layoutResult,
+              cameras: state.layoutResult.cameras.filter(
+                (camera) => camera.id !== state.selected?.id
+              ),
+              recommendedCameraCount: state.layoutResult.cameras.filter(
+                (camera) => camera.id !== state.selected?.id
+              ).length
+            }
+          : null,
         draftPoint: null,
         selected: null
       };

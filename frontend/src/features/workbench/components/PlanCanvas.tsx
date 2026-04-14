@@ -2,12 +2,13 @@ import { useRef } from "react";
 import type { MouseEvent } from "react";
 
 import type { DrawMode, ManualCamera, SelectedEntity, UploadAsset } from "../state/projectReducer";
-import type { PointDto, SegmentDto } from "../types";
+import type { LayoutResultDto, PointDto, SegmentDto } from "../types";
 
 interface PlanCanvasProps {
   cameras: ManualCamera[];
   doors: SegmentDto[];
   draftPoint: PointDto | null;
+  layoutResult: LayoutResultDto | null;
   selected: SelectedEntity | null;
   upload: UploadAsset | null;
   walls: SegmentDto[];
@@ -74,6 +75,7 @@ export function PlanCanvas({
   cameras,
   doors,
   draftPoint,
+  layoutResult,
   selected,
   upload,
   walls,
@@ -113,6 +115,34 @@ export function PlanCanvas({
           height: "100%"
         }}
       >
+        {layoutResult?.cameras.map((camera) => (
+          <polygon
+            data-coverage-camera-id={camera.id}
+            fill={camera.mode === "panoramic" ? "rgba(45, 91, 255, 0.12)" : "rgba(20, 184, 166, 0.16)"}
+            key={`coverage-${camera.id}`}
+            points={camera.coveragePolygon.map((point) => `${point.x},${point.y}`).join(" ")}
+            stroke={camera.mode === "panoramic" ? "rgba(45, 91, 255, 0.35)" : "rgba(20, 184, 166, 0.45)"}
+            strokeWidth={2}
+          />
+        ))}
+        {layoutResult?.blindSpots.map((point, index) => (
+          <circle
+            cx={point.x}
+            cy={point.y}
+            fill="rgba(220, 38, 38, 0.88)"
+            key={`blind-${index}`}
+            r={5}
+          />
+        ))}
+        {layoutResult?.overlapHints.map((point, index) => (
+          <circle
+            cx={point.x}
+            cy={point.y}
+            fill="rgba(245, 158, 11, 0.82)"
+            key={`overlap-${index}`}
+            r={5}
+          />
+        ))}
         {walls.map((wall) => (
           <line
             data-segment-id={wall.id}
