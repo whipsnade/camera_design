@@ -14,3 +14,18 @@ test("stores manual calibration and wall edits", () => {
   expect(withWall.scale?.pixelsPerMeter).toBe(50);
   expect(withWall.walls).toHaveLength(1);
 });
+
+test("clears draft point when selection changes", () => {
+  const withDraft = projectReducer(undefined, {
+    type: "project/draftPointSet",
+    payload: { x: 12, y: 34 }
+  });
+
+  const withSelection = projectReducer(withDraft, {
+    type: "project/selectedSet",
+    payload: { type: "camera", id: "camera-1" }
+  });
+
+  expect(withSelection.draftPoint).toBeNull();
+  expect(withSelection.selected).toEqual({ type: "camera", id: "camera-1" });
+});

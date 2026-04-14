@@ -17,15 +17,15 @@ import type { PointDto, SegmentDto } from "../types";
 
 function makeSegment(kind: "wall" | "door", start: PointDto, end: PointDto): SegmentDto {
   return {
-    id: `${kind}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `${kind}-${crypto.randomUUID()}`,
     start,
     end
   };
 }
 
-function makeCamera(point: PointDto, index: number): ManualCamera {
+function makeCamera(point: PointDto): ManualCamera {
   return {
-    id: `camera-${index + 1}`,
+    id: `camera-${crypto.randomUUID()}`,
     x: point.x,
     y: point.y
   };
@@ -33,6 +33,20 @@ function makeCamera(point: PointDto, index: number): ManualCamera {
 
 function isPdf(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+function createPreviewUrl(file: File) {
+  if (typeof URL.createObjectURL === "function") {
+    return URL.createObjectURL(file);
+  }
+
+  return `blob:${file.name}`;
+}
+
+function revokePreviewUrl(url: string) {
+  if (typeof URL.revokeObjectURL === "function") {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function getSelectedSegment(state: ProjectState, kind: "wall" | "door") {
@@ -66,7 +80,7 @@ export function WorkbenchPage() {
   useEffect(() => {
     return () => {
       if (state.upload?.url) {
-        URL.revokeObjectURL(state.upload.url);
+        revokePreviewUrl(state.upload.url);
       }
     };
   }, [state.upload]);
@@ -85,7 +99,7 @@ export function WorkbenchPage() {
         <UploadPanel
           onUpload={(file) => {
             if (state.upload?.url) {
-              URL.revokeObjectURL(state.upload.url);
+              revokePreviewUrl(state.upload.url);
             }
 
             dispatch({
@@ -93,7 +107,7 @@ export function WorkbenchPage() {
               payload: {
                 kind: isPdf(file) ? "pdf" : "image",
                 name: file.name,
-                url: URL.createObjectURL(file)
+                url: createPreviewUrl(file)
               }
             });
           }}
@@ -123,7 +137,7 @@ export function WorkbenchPage() {
             if (state.drawMode === "camera") {
               dispatch({
                 type: "project/cameraAdded",
-                payload: makeCamera(point, state.cameras.length)
+                payload: makeCamera(point)
               });
               return;
             }

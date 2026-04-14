@@ -56,7 +56,7 @@ function renderPreview(upload: UploadAsset | null) {
 
   return (
     <img
-      alt=""
+      alt="plan-preview"
       src={upload.url}
       style={{
         position: "absolute",
@@ -84,6 +84,7 @@ export function PlanCanvas({
 
   return (
     <div
+      aria-label="plan canvas"
       onClick={(event) => {
         if (!containerRef.current) {
           return;
@@ -114,6 +115,7 @@ export function PlanCanvas({
       >
         {walls.map((wall) => (
           <line
+            data-segment-id={wall.id}
             key={wall.id}
             onClick={(event) => {
               event.stopPropagation();
@@ -132,6 +134,7 @@ export function PlanCanvas({
         ))}
         {doors.map((door) => (
           <line
+            data-segment-id={door.id}
             key={door.id}
             onClick={(event) => {
               event.stopPropagation();
@@ -152,6 +155,7 @@ export function PlanCanvas({
           <circle
             cx={camera.x}
             cy={camera.y}
+            data-camera-id={camera.id}
             fill={isSelected(selected, "camera", camera.id) ? "#0f766e" : "#14b8a6"}
             key={camera.id}
             onClick={(event) => {

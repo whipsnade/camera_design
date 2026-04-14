@@ -79,6 +79,7 @@ export function projectReducer(
       return {
         ...state,
         cameras: [...state.cameras, action.payload],
+        draftPoint: null,
         selected: { type: "camera", id: action.payload.id }
       };
     case "project/cameraUpdated":
@@ -103,7 +104,7 @@ export function projectReducer(
     case "project/draftPointSet":
       return { ...state, draftPoint: action.payload };
     case "project/selectedSet":
-      return { ...state, selected: action.payload };
+      return { ...state, draftPoint: null, selected: action.payload };
     case "project/selectedDeleted":
       if (!state.selected) {
         return state;
@@ -113,6 +114,7 @@ export function projectReducer(
         return {
           ...state,
           walls: state.walls.filter((wall) => wall.id !== state.selected?.id),
+          draftPoint: null,
           selected: null
         };
       }
@@ -121,6 +123,7 @@ export function projectReducer(
         return {
           ...state,
           doors: state.doors.filter((door) => door.id !== state.selected?.id),
+          draftPoint: null,
           selected: null
         };
       }
@@ -128,6 +131,7 @@ export function projectReducer(
       return {
         ...state,
         cameras: state.cameras.filter((camera) => camera.id !== state.selected?.id),
+        draftPoint: null,
         selected: null
       };
     default:
