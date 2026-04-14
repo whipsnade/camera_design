@@ -57,3 +57,9 @@ export interface ProjectDto {
 }
 
 export type ProjectCreateDto = Omit<ProjectDto, "id">;
+
+export interface ExportBundleDto {
+  pngPath: string;
+  pdfPath: string;
+  projectPath: string;
+}

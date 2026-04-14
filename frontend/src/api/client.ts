@@ -1,6 +1,7 @@
 import type {
   CameraModeDto,
   CameraDto,
+  ExportBundleDto,
   LayoutCameraDto,
   LayoutResultDto,
   LayoutSolveRequestDto,
@@ -50,6 +51,23 @@ function parseCameraMode(value: unknown): CameraModeDto {
   }
 
   return value;
+}
+
+function parseExportBundleDto(value: unknown): ExportBundleDto {
+  if (
+    !isObject(value) ||
+    typeof value.png_path !== "string" ||
+    typeof value.pdf_path !== "string" ||
+    typeof value.project_path !== "string"
+  ) {
+    throw new Error("Invalid export payload");
+  }
+
+  return {
+    pngPath: value.png_path,
+    pdfPath: value.pdf_path,
+    projectPath: value.project_path
+  };
 }
 
 function parseLayoutCameraDto(value: unknown): LayoutCameraDto {
@@ -171,4 +189,32 @@ export async function solveLayout(request: LayoutSolveRequestDto): Promise<Layou
   }
 
   return parseLayoutResultDto(await response.json());
+}
+
+interface ExportProjectBundleRequest {
+  projectId: string;
+  metadataJson: string;
+  annotatedPngBlob?: Blob;
+}
+
+export async function exportProjectBundle(
+  request: ExportProjectBundleRequest
+): Promise<ExportBundleDto> {
+  const formData = new FormData();
+  formData.set("metadata_json", request.metadataJson);
+
+  if (request.annotatedPngBlob) {
+    formData.set("annotated_png", request.annotatedPngBlob, "annotated-plan.png");
+  }
+
+  const response = await fetch(`${API_PREFIX}/projects/${request.projectId}/export`, {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error(`Export request failed with status ${response.status}`);
+  }
+
+  return parseExportBundleDto(await response.json());
 }

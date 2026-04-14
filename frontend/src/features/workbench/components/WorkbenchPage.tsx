@@ -1,12 +1,13 @@
-import { useEffect, useReducer, type Dispatch } from "react";
+import { useEffect, useReducer, useRef, useState, type Dispatch } from "react";
 
-import { solveLayout } from "../../../api/client";
+import { exportProjectBundle, solveLayout } from "../../../api/client";
 import { ControlsPanel } from "./ControlsPanel";
 import { InspectorPanel } from "./InspectorPanel";
 import { PlanCanvas } from "./PlanCanvas";
 import { ResultsSummary } from "./ResultsSummary";
 import { UploadPanel } from "./UploadPanel";
 import { buildCoveragePolygon } from "../lib/coverage";
+import { exportPlanImage } from "../lib/exportPlan";
 import {
   initialState,
   projectReducer,
@@ -16,9 +17,11 @@ import {
   type ProjectState
 } from "../state/projectReducer";
 import type {
+  ExportBundleDto,
   LayoutCameraDto,
   LayoutResultDto,
   PointDto,
+  ProjectDto,
   SegmentDto
 } from "../types";
 
@@ -156,6 +159,9 @@ function mergeLockedLayout(
 
 export function WorkbenchPage() {
   const [state, dispatch] = useReducer(projectReducer, initialState);
+  const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">("idle");
+  const [exportBundle, setExportBundle] = useState<ExportBundleDto | null>(null);
+  const projectIdRef = useRef(`project-${crypto.randomUUID()}`);
 
   useEffect(() => {
     return () => {
@@ -171,6 +177,18 @@ export function WorkbenchPage() {
       : null;
   const selectedWall = getSelectedSegment(state, "wall");
   const selectedDoor = getSelectedSegment(state, "door");
+
+  const projectPayload: ProjectDto = {
+    id: projectIdRef.current,
+    name: state.name,
+    scale: state.scale,
+    cameras: state.cameras.map((camera, index) => ({
+      ...camera,
+      label: `CAM-${String(index + 1).padStart(2, "0")}`
+    })),
+    walls: state.walls,
+    doors: state.doors
+  };
 
   return (
     <main className="workbench-layout" aria-label="workbench layout">
@@ -278,7 +296,40 @@ export function WorkbenchPage() {
           cameraCount={state.cameras.length}
           coverageRatio={state.layoutResult?.coverageRatio ?? null}
           doorCount={state.doors.length}
+          exportBundle={exportBundle}
+          exportStatus={exportStatus}
           overlapHintCount={state.layoutResult?.overlapHints.length ?? 0}
+          onExport={async () => {
+            setExportStatus("exporting");
+            setExportBundle(null);
+
+            try {
+              let annotatedPngBlob: Blob | undefined;
+              try {
+                annotatedPngBlob = await exportPlanImage({
+                  upload: state.upload,
+                  walls: state.walls,
+                  doors: state.doors,
+                  cameras: state.cameras,
+                  layoutResult: state.layoutResult,
+                  width: CANVAS_WIDTH,
+                  height: CANVAS_HEIGHT
+                });
+              } catch {
+                annotatedPngBlob = undefined;
+              }
+
+              const bundle = await exportProjectBundle({
+                projectId: projectPayload.id,
+                metadataJson: JSON.stringify(projectPayload),
+                annotatedPngBlob
+              });
+              setExportBundle(bundle);
+              setExportStatus("done");
+            } catch {
+              setExportStatus("error");
+            }
+          }}
           pixelsPerMeter={state.scale?.pixelsPerMeter ?? null}
           recommendedCameraCount={state.layoutResult?.recommendedCameraCount ?? null}
           blindSpotCount={state.layoutResult?.blindSpots.length ?? 0}

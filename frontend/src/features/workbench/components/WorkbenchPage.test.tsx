@@ -1,6 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
+vi.mock("../lib/exportPlan", () => ({
+  exportPlanImage: vi.fn(() => Promise.resolve(new Blob(["png"], { type: "image/png" })))
+}));
+
 import { WorkbenchPage } from "./WorkbenchPage";
 
 afterEach(() => {
@@ -246,4 +250,42 @@ test("keeps a locked camera position when recalculating layout", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(lockedCamera?.getAttribute("cx")).toBe("80");
   expect(lockedCamera?.getAttribute("cy")).toBe("100");
+});
+
+test("exports the current plan bundle and shows generated paths", async () => {
+  vi.stubGlobal("URL", {
+    createObjectURL: vi.fn(() => "blob:floor-plan"),
+    revokeObjectURL: vi.fn()
+  });
+
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        project_path: "/tmp/demo-project/project.camera-plan.json",
+        png_path: "/tmp/demo-project/annotated-plan.png",
+        pdf_path: "/tmp/demo-project/annotated-plan.pdf"
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    )
+  );
+
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<WorkbenchPage />);
+
+  fireEvent.click(screen.getByRole("button", { name: "导出成果" }));
+
+  expect(await screen.findByLabelText("导出PDF路径")).toHaveValue(
+    "/tmp/demo-project/annotated-plan.pdf"
+  );
+  expect(fetchMock).toHaveBeenCalledWith(
+    expect.stringMatching(/\/api\/projects\/.+\/export$/),
+    expect.objectContaining({
+      method: "POST",
+      body: expect.any(FormData)
+    })
+  );
 });
