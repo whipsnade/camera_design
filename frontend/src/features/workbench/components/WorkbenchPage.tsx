@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState, type Dispatch } from "react";
 
-import { exportProjectBundle, solveLayout } from "../../../api/client";
+import { exportProjectBundle, recognizePlan, solveLayout } from "../../../api/client";
 import { ControlsPanel } from "./ControlsPanel";
 import { InspectorPanel } from "./InspectorPanel";
 import { PlanCanvas } from "./PlanCanvas";
@@ -195,7 +195,9 @@ export function WorkbenchPage() {
       <aside className="workbench-panel workbench-panel--sidebar">
         上传图纸
         <UploadPanel
-          onUpload={(file) => {
+          confidenceItemCount={state.recognitionConfidenceItems.length}
+          recognitionStatus={state.recognitionStatus}
+          onUpload={async (file) => {
             if (state.upload?.url) {
               revokePreviewUrl(state.upload.url);
             }
@@ -208,6 +210,22 @@ export function WorkbenchPage() {
                 url: createPreviewUrl(file)
               }
             });
+
+            if (isPdf(file)) {
+              return;
+            }
+
+            dispatch({ type: "project/recognitionStarted" });
+
+            try {
+              const recognitionResult = await recognizePlan(file);
+              dispatch({
+                type: "project/recognitionSucceeded",
+                payload: recognitionResult
+              });
+            } catch {
+              dispatch({ type: "project/recognitionFailed" });
+            }
           }}
           upload={state.upload}
         />
@@ -332,6 +350,7 @@ export function WorkbenchPage() {
           }}
           pixelsPerMeter={state.scale?.pixelsPerMeter ?? null}
           recommendedCameraCount={state.layoutResult?.recommendedCameraCount ?? null}
+          recognitionConfidenceCount={state.recognitionConfidenceItems.length}
           blindSpotCount={state.layoutResult?.blindSpots.length ?? 0}
           wallCount={state.walls.length}
         />

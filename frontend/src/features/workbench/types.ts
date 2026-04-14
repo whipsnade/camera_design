@@ -63,3 +63,16 @@ export interface ExportBundleDto {
   pdfPath: string;
   projectPath: string;
 }
+
+export interface RecognitionConfidenceItemDto {
+  id: string;
+  message: string;
+  severity: string;
+}
+
+export interface RecognitionResultDto {
+  scale: ScaleState | null;
+  walls: SegmentDto[];
+  doors: SegmentDto[];
+  confidenceItems: RecognitionConfidenceItemDto[];
+}

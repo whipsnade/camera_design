@@ -9,6 +9,7 @@ interface ResultsSummaryProps {
   overlapHintCount: number;
   pixelsPerMeter: number | null;
   recommendedCameraCount: number | null;
+  recognitionConfidenceCount: number;
   blindSpotCount: number;
   wallCount: number;
   onExport: () => void;
@@ -31,6 +32,7 @@ export function ResultsSummary({
   overlapHintCount,
   pixelsPerMeter,
   recommendedCameraCount,
+  recognitionConfidenceCount,
   blindSpotCount,
   wallCount,
   onExport
@@ -55,6 +57,12 @@ export function ResultsSummary({
       />
       <input aria-label="盲区数量" readOnly style={metricStyle} value={blindSpotCount} />
       <input aria-label="重叠提示数量" readOnly style={metricStyle} value={overlapHintCount} />
+      <input
+        aria-label="识别待确认项"
+        readOnly
+        style={metricStyle}
+        value={recognitionConfidenceCount}
+      />
       <button
         aria-label="导出成果"
         onClick={onExport}

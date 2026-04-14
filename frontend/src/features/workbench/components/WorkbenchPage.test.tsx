@@ -29,6 +29,23 @@ test("uploads a plan file and renders the preview", () => {
     createObjectURL: vi.fn(() => "blob:floor-plan"),
     revokeObjectURL: vi.fn()
   });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          scale: null,
+          walls: [],
+          doors: [],
+          confidence_items: []
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
+    )
+  );
 
   const { container } = render(<WorkbenchPage />);
   const input = screen.getByLabelText("上传图纸文件");
@@ -38,6 +55,53 @@ test("uploads a plan file and renders the preview", () => {
 
   expect(screen.getByLabelText("当前图纸文件")).toHaveValue("floor.png");
   expect(screen.getByAltText("plan-preview")).toBeInTheDocument();
+});
+
+test("uploads a plan file and applies recognition suggestions with fallback hints", async () => {
+  vi.stubGlobal("URL", {
+    createObjectURL: vi.fn(() => "blob:floor-plan"),
+    revokeObjectURL: vi.fn()
+  });
+
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        scale: { pixelsPerMeter: 40, source: "auto" },
+        walls: [
+          { start: { x: 20, y: 20 }, end: { x: 20, y: 160 } },
+          { start: { x: 220, y: 20 }, end: { x: 220, y: 160 } },
+          { start: { x: 20, y: 160 }, end: { x: 220, y: 160 } },
+          { start: { x: 20, y: 20 }, end: { x: 90, y: 20 } }
+        ],
+        doors: [{ start: { x: 90, y: 20 }, end: { x: 150, y: 20 } }],
+        confidence_items: [
+          {
+            id: "structure-review",
+            message: "请确认自动识别的墙体和门洞位置。",
+            severity: "warning"
+          }
+        ]
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    )
+  );
+
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<WorkbenchPage />);
+  const input = screen.getByLabelText("上传图纸文件");
+  const file = new File(["demo"], "floor.png", { type: "image/png" });
+
+  fireEvent.change(input, { target: { files: [file] } });
+
+  expect(await screen.findByLabelText("识别状态")).toHaveValue("已识别");
+  expect(await screen.findByLabelText("当前标定")).toHaveValue("40");
+  expect(await screen.findByLabelText("墙体数量")).toHaveValue("4");
+  expect(await screen.findByLabelText("门洞数量")).toHaveValue("1");
+  expect(await screen.findByLabelText("待确认项数量")).toHaveValue("1");
 });
 
 test("keeps camera ids unique after delete and re-add", () => {

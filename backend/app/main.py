@@ -3,8 +3,10 @@ from fastapi import FastAPI
 from app.api.health import router as health_router
 from app.api.layout import router as layout_router
 from app.api.projects import router as projects_router
+from app.api.recognition import router as recognition_router
 
 app = FastAPI()
 app.include_router(health_router, prefix="/api")
 app.include_router(layout_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
+app.include_router(recognition_router, prefix="/api")

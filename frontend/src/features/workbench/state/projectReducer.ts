@@ -3,6 +3,7 @@ import type {
   CameraModeDto,
   LayoutResultDto,
   PointDto,
+  RecognitionResultDto,
   ScaleState,
   SegmentDto
 } from "../types";
@@ -39,6 +40,8 @@ export interface ProjectState {
   coverageDistanceM: number;
   layoutResult: LayoutResultDto | null;
   layoutStatus: "idle" | "loading" | "ready" | "error";
+  recognitionStatus: "idle" | "loading" | "ready" | "error";
+  recognitionConfidenceItems: RecognitionResultDto["confidenceItems"];
   upload: UploadAsset | null;
   drawMode: DrawMode;
   draftPoint: PointDto | null;
@@ -59,6 +62,9 @@ export type ProjectAction =
       payload: { cameras: ManualCamera[]; layoutResult: LayoutResultDto };
     }
   | { type: "project/layoutRequestFailed" }
+  | { type: "project/recognitionStarted" }
+  | { type: "project/recognitionSucceeded"; payload: RecognitionResultDto }
+  | { type: "project/recognitionFailed" }
   | { type: "project/uploadSet"; payload: UploadAsset | null }
   | { type: "project/modeSet"; payload: DrawMode }
   | { type: "project/draftPointSet"; payload: PointDto | null }
@@ -74,11 +80,20 @@ export const initialState: ProjectState = {
   coverageDistanceM: 8,
   layoutResult: null,
   layoutStatus: "idle",
+  recognitionStatus: "idle",
+  recognitionConfidenceItems: [],
   upload: null,
   drawMode: "wall",
   draftPoint: null,
   selected: null
 };
+
+function withSegmentIds(kind: "wall" | "door", segments: SegmentDto[]): SegmentDto[] {
+  return segments.map((segment, index) => ({
+    ...segment,
+    id: segment.id ?? `${kind}-recognition-${index + 1}`
+  }));
+}
 
 export function projectReducer(
   state: ProjectState = initialState,
@@ -152,9 +167,40 @@ export function projectReducer(
         ...state,
         layoutStatus: "error"
       };
+    case "project/recognitionStarted":
+      return {
+        ...state,
+        recognitionStatus: "loading",
+        recognitionConfidenceItems: []
+      };
+    case "project/recognitionSucceeded":
+      return {
+        ...state,
+        scale: action.payload.scale,
+        walls: withSegmentIds("wall", action.payload.walls),
+        doors: withSegmentIds("door", action.payload.doors),
+        layoutResult: null,
+        layoutStatus: "idle",
+        recognitionStatus: "ready",
+        recognitionConfidenceItems: action.payload.confidenceItems
+      };
+    case "project/recognitionFailed":
+      return {
+        ...state,
+        recognitionStatus: "error",
+        recognitionConfidenceItems: []
+      };
     case "project/uploadSet":
       return {
         ...state,
+        scale: null,
+        cameras: [],
+        walls: [],
+        doors: [],
+        layoutResult: null,
+        layoutStatus: "idle",
+        recognitionStatus: "idle",
+        recognitionConfidenceItems: [],
         upload: action.payload,
         draftPoint: null
       };

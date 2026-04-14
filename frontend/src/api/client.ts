@@ -8,6 +8,8 @@ import type {
   ProjectCreateDto,
   ProjectDto,
   PointDto,
+  RecognitionConfidenceItemDto,
+  RecognitionResultDto,
   ScaleState,
   SegmentDto
 } from "../features/workbench/types";
@@ -67,6 +69,40 @@ function parseExportBundleDto(value: unknown): ExportBundleDto {
     pngPath: value.png_path,
     pdfPath: value.pdf_path,
     projectPath: value.project_path
+  };
+}
+
+function parseRecognitionConfidenceItem(value: unknown): RecognitionConfidenceItemDto {
+  if (
+    !isObject(value) ||
+    typeof value.id !== "string" ||
+    typeof value.message !== "string" ||
+    typeof value.severity !== "string"
+  ) {
+    throw new Error("Invalid recognition confidence item");
+  }
+
+  return {
+    id: value.id,
+    message: value.message,
+    severity: value.severity
+  };
+}
+
+function parseSegment(value: unknown): SegmentDto {
+  if (
+    !isObject(value) ||
+    (typeof value.id !== "string" && typeof value.id !== "undefined") ||
+    !isObject(value.start) ||
+    !isObject(value.end)
+  ) {
+    throw new Error("Invalid segment");
+  }
+
+  return {
+    id: typeof value.id === "string" ? value.id : undefined,
+    start: parsePoint(value.start),
+    end: parsePoint(value.end)
   };
 }
 
@@ -134,6 +170,24 @@ export function parseProjectDto(value: unknown): ProjectDto {
   };
 }
 
+export function parseRecognitionResultDto(value: unknown): RecognitionResultDto {
+  if (
+    !isObject(value) ||
+    !Array.isArray(value.walls) ||
+    !Array.isArray(value.doors) ||
+    !Array.isArray(value.confidence_items)
+  ) {
+    throw new Error("Invalid recognition payload");
+  }
+
+  return {
+    scale: parseScaleState(value.scale ?? null),
+    walls: value.walls.map(parseSegment),
+    doors: value.doors.map(parseSegment),
+    confidenceItems: value.confidence_items.map(parseRecognitionConfidenceItem)
+  };
+}
+
 async function requestProject(path: string, init: RequestInit): Promise<ProjectDto> {
   const response = await fetch(`${API_PREFIX}${path}`, init);
 
@@ -189,6 +243,22 @@ export async function solveLayout(request: LayoutSolveRequestDto): Promise<Layou
   }
 
   return parseLayoutResultDto(await response.json());
+}
+
+export async function recognizePlan(file: File): Promise<RecognitionResultDto> {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  const response = await fetch(`${API_PREFIX}/recognition/plan`, {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error(`Recognition request failed with status ${response.status}`);
+  }
+
+  return parseRecognitionResultDto(await response.json());
 }
 
 interface ExportProjectBundleRequest {
