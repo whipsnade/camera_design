@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class Point(BaseModel):
@@ -7,8 +7,29 @@ class Point(BaseModel):
 
 
 class ScaleState(BaseModel):
-    pixelsPerMeter: float
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    unitsPerMeter: float | None = None
+    pixelsPerMeter: float | None = None
     source: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_scale_fields(cls, value):
+        if not isinstance(value, dict):
+            return value
+
+        migrated = dict(value)
+        units_per_meter = migrated.get("unitsPerMeter")
+        pixels_per_meter = migrated.get("pixelsPerMeter")
+
+        if units_per_meter is None and isinstance(pixels_per_meter, (int, float)):
+            migrated["unitsPerMeter"] = float(pixels_per_meter)
+
+        if pixels_per_meter is None and isinstance(units_per_meter, (int, float)):
+            migrated["pixelsPerMeter"] = float(units_per_meter)
+
+        return migrated
 
 
 class Segment(BaseModel):
