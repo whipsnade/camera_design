@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+try:
+    import ezdwg
+except ImportError:  # pragma: no cover - exercised when the optional dependency is absent
+    ezdwg = None
+
 from app.models.cad import CadImportResult, CadPoint, CadSegment, CadViewport, CadWarning
 from app.services.cad_geometry import (
     AffineTransform,
@@ -44,9 +49,19 @@ class EntityContext:
 
 
 def import_dwg_file(path: str | Path) -> CadImportResult:
+    ezdwg_error: Exception | None = None
+    if ezdwg is not None:
+        try:
+            document = ezdwg.read(str(path))
+            return normalize_dwg_payload(_document_to_payload(document))
+        except Exception as exc:
+            ezdwg_error = exc
+
     dwgread = shutil.which("dwgread")
     if dwgread is None:
-        raise DwgImportError("dwgread is not installed")
+        if ezdwg_error is not None:
+            raise DwgImportError(f"ezdwg failed to read DWG: {ezdwg_error}") from ezdwg_error
+        raise DwgImportError("ezdwg is not installed and dwgread is not installed")
 
     completed = subprocess.run(
         [dwgread, "-O", "JSON", str(path)],
@@ -65,6 +80,132 @@ def import_dwg_file(path: str | Path) -> CadImportResult:
         raise DwgImportError("dwgread did not return valid JSON") from exc
 
     return normalize_dwg_payload(payload)
+
+
+def _document_to_payload(document: Any) -> Mapping[str, Any]:
+    return {
+        "header": {},
+        "modelspace": _layout_entities(document.modelspace()),
+        "blocks": _document_blocks(document),
+    }
+
+
+def _document_blocks(document: Any) -> dict[str, dict[str, list[Mapping[str, Any]]]]:
+    blocks: dict[str, dict[str, list[Mapping[str, Any]]]] = {}
+    try:
+        layouts = list(document.blocks)
+    except Exception:
+        layouts = []
+
+    for layout in layouts:
+        name = getattr(layout, "name", None)
+        if not isinstance(name, str) or not name:
+            continue
+
+        upper_name = name.upper()
+        if upper_name.startswith("*MODEL_SPACE") or upper_name.startswith("*PAPER_SPACE"):
+            continue
+
+        entities = _layout_entities(layout)
+        if not entities:
+            continue
+
+        blocks[name] = {"entities": entities}
+
+    return blocks
+
+
+def _layout_entities(layout: Any) -> list[Mapping[str, Any]]:
+    entities = _query_layout_entities(layout)
+    return [_entity_to_payload(entity) for entity in entities]
+
+
+def _query_layout_entities(layout: Any) -> list[Any]:
+    query = getattr(layout, "query", None)
+    if callable(query):
+        try:
+            return list(query())
+        except Exception:
+            pass
+
+    try:
+        return list(layout)
+    except Exception:
+        return []
+
+
+def _entity_to_payload(entity: Any) -> dict[str, Any]:
+    dxftype = _entity_type_name(entity)
+    dxf = getattr(entity, "dxf", {})
+    if not isinstance(dxf, Mapping):
+        dxf = {}
+
+    payload: dict[str, Any] = {
+        "type": dxftype,
+    }
+    handle = getattr(entity, "handle", None)
+    if handle is not None:
+        payload["handle"] = str(handle)
+
+    layer = dxf.get("layer") or dxf.get("Layer")
+    if isinstance(layer, str) and layer:
+        payload["layer"] = layer
+
+    if dxftype == "LINE":
+        if "start" in dxf:
+            payload["start"] = dxf["start"]
+        if "end" in dxf:
+            payload["end"] = dxf["end"]
+    elif dxftype == "LWPOLYLINE":
+        if "points" in dxf:
+            payload["points"] = dxf["points"]
+        if "closed" in dxf:
+            payload["closed"] = bool(dxf["closed"])
+        if "flags" in dxf:
+            payload["flags"] = dxf["flags"]
+    elif dxftype == "ARC":
+        for key in ("center", "radius", "start_angle", "end_angle"):
+            if key in dxf:
+                payload[key] = dxf[key]
+    elif dxftype == "CIRCLE":
+        for key in ("center", "radius"):
+            if key in dxf:
+                payload[key] = dxf[key]
+    elif dxftype in {"INSERT", "MINSERT"}:
+        insert_point = dxf.get("insert") or dxf.get("position") or dxf.get("insert_point")
+        if insert_point is not None:
+            payload["insert"] = insert_point
+        for key in (
+            "name",
+            "xscale",
+            "yscale",
+            "zscale",
+            "rotation",
+            "column_count",
+            "row_count",
+            "column_spacing",
+            "row_spacing",
+        ):
+            if key in dxf:
+                payload[key] = dxf[key]
+    else:
+        name = dxf.get("name")
+        if isinstance(name, str) and name:
+            payload["name"] = name
+
+    return payload
+
+
+def _entity_type_name(entity: Any) -> str:
+    dxftype = getattr(entity, "dxftype", None)
+    if callable(dxftype):
+        try:
+            dxftype = dxftype()
+        except Exception:
+            dxftype = None
+    if isinstance(dxftype, str) and dxftype:
+        return dxftype.upper()
+    return "UNKNOWN"
 
 
 def normalize_dwg_payload(payload: Mapping[str, Any]) -> CadImportResult:

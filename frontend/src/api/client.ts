@@ -91,6 +91,24 @@ function parseDwgImportWarning(value: unknown) {
   };
 }
 
+async function readErrorMessage(response: Response, fallback: string): Promise<string> {
+  const body = await response.text();
+  if (!body) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(body);
+    if (isObject(parsed) && typeof parsed.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail;
+    }
+  } catch {
+    // Fall through to the raw body text below.
+  }
+
+  return body.trim() || fallback;
+}
+
 function parsePoint(value: unknown): PointDto {
   if (!isObject(value) || typeof value.x !== "number" || typeof value.y !== "number") {
     throw new Error("Invalid point");
@@ -312,7 +330,9 @@ export async function importDwgPlan(file: File): Promise<DwgImportResultDto> {
   });
 
   if (!response.ok) {
-    throw new Error(`DWG import failed with status ${response.status}`);
+    throw new Error(
+      await readErrorMessage(response, `DWG import failed with status ${response.status}`)
+    );
   }
 
   return parseDwgImportResultDto(await response.json());

@@ -116,6 +116,7 @@ export function WorkbenchPage() {
   const [state, dispatch] = useReducer(projectReducer, initialState);
   const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">("idle");
   const [exportBundle, setExportBundle] = useState<ExportBundleDto | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const projectIdRef = useRef(`project-${crypto.randomUUID()}`);
 
   const hasRegionPolygon = state.regionPolygon.length >= 3;
@@ -145,8 +146,10 @@ export function WorkbenchPage() {
         导入 DWG
         <UploadPanel
           importStatus={state.importStatus}
+          importMessage={importMessage}
           importWarningCount={state.importWarnings.length}
           onUpload={async (file) => {
+            setImportMessage(null);
             dispatch({
               type: "project/uploadSet",
               payload: {
@@ -161,7 +164,9 @@ export function WorkbenchPage() {
                 type: "project/importSucceeded",
                 payload: importResult
               });
-            } catch {
+              setImportMessage(null);
+            } catch (error) {
+              setImportMessage(error instanceof Error ? error.message : "DWG 导入失败");
               dispatch({ type: "project/importFailed" });
             }
           }}

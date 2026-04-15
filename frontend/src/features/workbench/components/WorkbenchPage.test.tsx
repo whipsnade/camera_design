@@ -172,6 +172,27 @@ test("shows cad unit calibration and import warnings after dwg import", async ()
   expect(screen.getByLabelText("门洞数量")).toHaveValue("1");
 });
 
+test("surfaces the backend import error when dwgread is missing", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ detail: "dwgread is not installed" }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" }
+    })
+  );
+
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<WorkbenchPage />);
+
+  fireEvent.change(screen.getByLabelText("上传DWG文件"), {
+    target: { files: [new File(["dwg"], "simple_room.dwg", { type: "application/acad" })] }
+  });
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("导入状态")).toHaveValue("导入失败：dwgread is not installed");
+  });
+});
+
 test("keeps camera ids unique after delete and re-add", () => {
   vi.stubGlobal("URL", {
     createObjectURL: vi.fn(() => "blob:floor-plan"),

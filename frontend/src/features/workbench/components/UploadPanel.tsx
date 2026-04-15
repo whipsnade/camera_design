@@ -4,6 +4,7 @@ import type { UploadAsset } from "../state/projectReducer";
 
 interface UploadPanelProps {
   importStatus: "idle" | "loading" | "ready" | "error";
+  importMessage: string | null;
   importWarningCount: number;
   upload: UploadAsset | null;
   onUpload: (file: File) => void;
@@ -17,7 +18,7 @@ const fieldStyle = {
   background: "rgba(244, 247, 252, 0.95)"
 } as const;
 
-function importLabel(status: UploadPanelProps["importStatus"]) {
+function importLabel(status: UploadPanelProps["importStatus"], message: string | null) {
   if (status === "loading") {
     return "导入中";
   }
@@ -27,7 +28,7 @@ function importLabel(status: UploadPanelProps["importStatus"]) {
   }
 
   if (status === "error") {
-    return "导入失败";
+    return message ? `导入失败：${message}` : "导入失败";
   }
 
   return "";
@@ -35,6 +36,7 @@ function importLabel(status: UploadPanelProps["importStatus"]) {
 
 export function UploadPanel({
   importStatus,
+  importMessage,
   importWarningCount,
   upload,
   onUpload
@@ -71,7 +73,7 @@ export function UploadPanel({
         placeholder="未开始导入"
         readOnly
         style={fieldStyle}
-        value={importLabel(importStatus)}
+        value={importLabel(importStatus, importMessage)}
       />
       <input
         aria-label="导入警告数量"

@@ -5,9 +5,11 @@ description = "Backend service for the CAD project"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi",
+    "ezdwg>=0.8.1",
     "Pillow",
     "python-multipart",
     "uvicorn",
+    "reportlab>=4.0.0",
 ]
 
 [project.optional-dependencies]
