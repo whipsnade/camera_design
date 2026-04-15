@@ -7,9 +7,9 @@ interface ResultsSummaryProps {
   exportBundle: ExportBundleDto | null;
   exportStatus: "idle" | "exporting" | "done" | "error";
   overlapHintCount: number;
-  pixelsPerMeter: number | null;
+  unitsPerMeter: number | null;
   recommendedCameraCount: number | null;
-  recognitionConfidenceCount: number;
+  importWarningCount: number;
   blindSpotCount: number;
   wallCount: number;
   onExport: () => void;
@@ -30,9 +30,9 @@ export function ResultsSummary({
   exportBundle,
   exportStatus,
   overlapHintCount,
-  pixelsPerMeter,
+  unitsPerMeter,
   recommendedCameraCount,
-  recognitionConfidenceCount,
+  importWarningCount,
   blindSpotCount,
   wallCount,
   onExport
@@ -42,7 +42,7 @@ export function ResultsSummary({
       <input aria-label="墙体数量" readOnly style={metricStyle} value={wallCount} />
       <input aria-label="门洞数量" readOnly style={metricStyle} value={doorCount} />
       <input aria-label="相机数量" readOnly style={metricStyle} value={cameraCount} />
-      <input aria-label="当前标定" readOnly style={metricStyle} value={pixelsPerMeter ?? ""} />
+      <input aria-label="当前标定" readOnly style={metricStyle} value={unitsPerMeter ?? ""} />
       <input
         aria-label="建议摄像头数量"
         readOnly
@@ -58,10 +58,10 @@ export function ResultsSummary({
       <input aria-label="盲区数量" readOnly style={metricStyle} value={blindSpotCount} />
       <input aria-label="重叠提示数量" readOnly style={metricStyle} value={overlapHintCount} />
       <input
-        aria-label="识别待确认项"
+        aria-label="导入警告"
         readOnly
         style={metricStyle}
-        value={recognitionConfidenceCount}
+        value={importWarningCount}
       />
       <button
         aria-label="导出成果"

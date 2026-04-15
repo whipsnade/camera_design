@@ -256,12 +256,7 @@ export function parseDwgImportResultDto(value: unknown): DwgImportResultDto {
     throw new Error("Invalid DWG import payload");
   }
 
-  const unitsPerMeter =
-    typeof value.units_per_meter === "number" ? value.units_per_meter : null;
-
-  if (unitsPerMeter === null) {
-    throw new Error("Invalid DWG import payload");
-  }
+  const unitsPerMeter = typeof value.units_per_meter === "number" ? value.units_per_meter : null;
 
   return {
     unitsPerMeter,

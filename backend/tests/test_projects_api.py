@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -64,7 +66,7 @@ def test_load_legacy_project_payload_migrates_pixels_per_meter(tmp_path, monkeyp
         "doors": [],
     }
     (tmp_path / f"{project_id}.json").write_text(
-        __import__("json").dumps(legacy_payload),
+        json.dumps(legacy_payload),
         encoding="utf-8",
     )
 

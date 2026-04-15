@@ -1,31 +1,117 @@
 import { useRef } from "react";
 import type { MouseEvent } from "react";
 
-import type { DrawMode, ManualCamera, SelectedEntity, UploadAsset } from "../state/projectReducer";
-import type { LayoutResultDto, PointDto, SegmentDto } from "../types";
+import type { ManualCamera, SelectedEntity } from "../state/projectReducer";
+import type { DwgImportViewportDto, LayoutResultDto, PointDto, SegmentDto } from "../types";
 
 interface PlanCanvasProps {
   cameras: ManualCamera[];
   doors: SegmentDto[];
   draftPoint: PointDto | null;
   layoutResult: LayoutResultDto | null;
+  regionPolygon: PointDto[];
+  regionDraftPoints: PointDto[];
   selected: SelectedEntity | null;
-  upload: UploadAsset | null;
+  viewport: DwgImportViewportDto | null;
   walls: SegmentDto[];
   onCanvasClick: (point: PointDto) => void;
   onSelect: (selection: SelectedEntity | null) => void;
 }
 
+const DEFAULT_VIEWPORT: DwgImportViewportDto = {
+  minX: 0,
+  minY: 0,
+  maxX: 1000,
+  maxY: 1000,
+  width: 1000,
+  height: 1000
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function toPoint(event: MouseEvent<HTMLDivElement>, element: HTMLDivElement): PointDto {
+function collectBounds(points: PointDto[]): DwgImportViewportDto | null {
+  if (!points.length) {
+    return null;
+  }
+
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const width = Math.max(maxX - minX, 1);
+  const height = Math.max(maxY - minY, 1);
+
+  return { minX, minY, maxX, maxY, width, height };
+}
+
+function resolveViewport(props: Pick<
+  PlanCanvasProps,
+  "viewport" | "walls" | "doors" | "cameras" | "layoutResult" | "regionPolygon" | "regionDraftPoints" | "draftPoint"
+>): DwgImportViewportDto {
+  if (props.viewport) {
+    return props.viewport;
+  }
+
+  const points: PointDto[] = [];
+
+  for (const wall of props.walls) {
+    points.push(wall.start, wall.end);
+  }
+
+  for (const door of props.doors) {
+    points.push(door.start, door.end);
+  }
+
+  for (const camera of props.cameras) {
+    points.push({ x: camera.x, y: camera.y });
+  }
+
+  for (const point of props.regionPolygon) {
+    points.push(point);
+  }
+
+  for (const point of props.regionDraftPoints) {
+    points.push(point);
+  }
+
+  if (props.draftPoint) {
+    points.push(props.draftPoint);
+  }
+
+  for (const camera of props.layoutResult?.cameras ?? []) {
+    points.push(...camera.coveragePolygon);
+  }
+
+  for (const point of props.layoutResult?.blindSpots ?? []) {
+    points.push(point);
+  }
+
+  for (const point of props.layoutResult?.overlapHints ?? []) {
+    points.push(point);
+  }
+
+  return collectBounds(points) ?? DEFAULT_VIEWPORT;
+}
+
+function toPoint(
+  event: MouseEvent<HTMLDivElement>,
+  element: HTMLDivElement,
+  viewport: DwgImportViewportDto
+): PointDto {
   const bounds = element.getBoundingClientRect();
+  const cssX = event.clientX - bounds.left;
+  const cssY = event.clientY - bounds.top;
+  const scaleX = bounds.width / viewport.width;
+  const scaleY = bounds.height / viewport.height;
+  const scale = Math.min(scaleX, scaleY) || 1;
+  const offsetX = (bounds.width - viewport.width * scale) / 2;
+  const offsetY = (bounds.height - viewport.height * scale) / 2;
 
   return {
-    x: clamp(event.clientX - bounds.left, 0, bounds.width),
-    y: clamp(event.clientY - bounds.top, 0, bounds.height)
+    x: viewport.minX + clamp((cssX - offsetX) / scale, 0, viewport.width),
+    y: viewport.minY + clamp((cssY - offsetY) / scale, 0, viewport.height)
   };
 }
 
@@ -33,56 +119,30 @@ function isSelected(selected: SelectedEntity | null, type: SelectedEntity["type"
   return selected?.type === type && selected.id === id;
 }
 
-function renderPreview(upload: UploadAsset | null) {
-  if (!upload) {
-    return null;
-  }
-
-  if (upload.kind === "pdf") {
-    return (
-      <iframe
-        src={upload.url}
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          border: "none",
-          pointerEvents: "none"
-        }}
-        title="plan-preview"
-      />
-    );
-  }
-
-  return (
-    <img
-      alt="plan-preview"
-      src={upload.url}
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        objectFit: "contain",
-        pointerEvents: "none"
-      }}
-    />
-  );
-}
-
 export function PlanCanvas({
   cameras,
   doors,
   draftPoint,
   layoutResult,
+  regionPolygon,
+  regionDraftPoints,
   selected,
-  upload,
+  viewport,
   walls,
   onCanvasClick,
   onSelect
 }: PlanCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const effectiveViewport = resolveViewport({
+    viewport,
+    walls,
+    doors,
+    cameras,
+    layoutResult,
+    regionPolygon,
+    regionDraftPoints,
+    draftPoint
+  });
 
   return (
     <div
@@ -92,7 +152,7 @@ export function PlanCanvas({
           return;
         }
 
-        onCanvasClick(toPoint(event, containerRef.current));
+        onCanvasClick(toPoint(event, containerRef.current, effectiveViewport));
       }}
       ref={containerRef}
       style={{
@@ -102,12 +162,15 @@ export function PlanCanvas({
         borderRadius: 24,
         overflow: "hidden",
         border: "1px dashed rgba(19, 34, 56, 0.22)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(237,243,252,0.92) 100%)"
+        backgroundColor: "rgba(248, 250, 252, 0.94)",
+        backgroundImage:
+          "linear-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.14) 1px, transparent 1px)",
+        backgroundSize: "24px 24px"
       }}
     >
-      {renderPreview(upload)}
       <svg
+        viewBox={`${effectiveViewport.minX} ${effectiveViewport.minY} ${effectiveViewport.width} ${effectiveViewport.height}`}
+        preserveAspectRatio="xMidYMid meet"
         style={{
           position: "absolute",
           inset: 0,
@@ -115,6 +178,56 @@ export function PlanCanvas({
           height: "100%"
         }}
       >
+        {regionPolygon.length >= 3 && (
+          <polygon
+            points={regionPolygon.map((point) => `${point.x},${point.y}`).join(" ")}
+            fill="rgba(99, 102, 241, 0.08)"
+            stroke="rgba(99, 102, 241, 0.5)"
+            strokeWidth={2}
+            strokeDasharray="10 5"
+          />
+        )}
+        {regionDraftPoints.map((point, index) => {
+          if (index === 0) {
+            return null;
+          }
+
+          const prev = regionDraftPoints[index - 1];
+          return (
+            <line
+              key={`region-draft-line-${index}`}
+              x1={prev.x}
+              y1={prev.y}
+              x2={point.x}
+              y2={point.y}
+              stroke="rgba(99, 102, 241, 0.7)"
+              strokeWidth={3}
+              strokeDasharray="8 4"
+            />
+          );
+        })}
+        {regionDraftPoints.map((point, index) => (
+          <circle
+            key={`region-draft-point-${index}`}
+            cx={point.x}
+            cy={point.y}
+            r={index === 0 ? 10 : 7}
+            fill={index === 0 ? "rgba(99, 102, 241, 0.9)" : "rgba(99, 102, 241, 0.6)"}
+            stroke="#fff"
+            strokeWidth={2}
+          />
+        ))}
+        {regionDraftPoints.length >= 3 && (
+          <circle
+            cx={regionDraftPoints[0].x}
+            cy={regionDraftPoints[0].y}
+            r={20}
+            fill="none"
+            stroke="rgba(99, 102, 241, 0.4)"
+            strokeWidth={2}
+            strokeDasharray="4 4"
+          />
+        )}
         {layoutResult?.cameras.map((camera) => (
           <polygon
             data-coverage-camera-id={camera.id}

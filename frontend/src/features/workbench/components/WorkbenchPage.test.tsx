@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../lib/exportPlan", () => ({
   exportPlanImage: vi.fn(() => Promise.resolve(new Blob(["png"], { type: "image/png" })))
@@ -11,6 +11,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function confirmRegionPolygon() {
+  const canvas = screen.getByLabelText("plan canvas");
+
+  fireEvent.click(canvas, { clientX: 40, clientY: 40 });
+  fireEvent.click(canvas, { clientX: 220, clientY: 40 });
+  fireEvent.click(canvas, { clientX: 220, clientY: 180 });
+  fireEvent.click(screen.getByRole("button", { name: "确认区域" }));
+}
+
 test("renders exactly three ordered workbench regions", () => {
   render(<WorkbenchPage />);
 
@@ -19,65 +28,122 @@ test("renders exactly three ordered workbench regions", () => {
 
   expect(layout.tagName).toBe("MAIN");
   expect(regions).toHaveLength(3);
-  expect(regions[0].textContent).toContain("上传图纸");
-  expect(regions[1].textContent).toContain("图纸画布");
+  expect(regions[0].textContent).toContain("导入 DWG");
+  expect(regions[1].textContent).toContain("DWG 画布");
   expect(regions[2].textContent).toContain("覆盖距离");
 });
 
-test("uploads a plan file and renders the preview", () => {
-  vi.stubGlobal("URL", {
-    createObjectURL: vi.fn(() => "blob:floor-plan"),
-    revokeObjectURL: vi.fn()
-  });
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          scale: null,
-          walls: [],
-          doors: [],
-          confidence_items: []
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" }
-        }
-      )
-    )
-  );
-
-  const { container } = render(<WorkbenchPage />);
-  const input = screen.getByLabelText("上传图纸文件");
-  const file = new File(["demo"], "floor.png", { type: "image/png" });
-
-  fireEvent.change(input, { target: { files: [file] } });
-
-  expect(screen.getByLabelText("当前图纸文件")).toHaveValue("floor.png");
-  expect(screen.getByAltText("plan-preview")).toBeInTheDocument();
-});
-
-test("uploads a plan file and applies recognition suggestions with fallback hints", async () => {
-  vi.stubGlobal("URL", {
-    createObjectURL: vi.fn(() => "blob:floor-plan"),
-    revokeObjectURL: vi.fn()
-  });
-
+test("uploads a dwg file and renders imported geometry", async () => {
   const fetchMock = vi.fn().mockResolvedValue(
     new Response(
       JSON.stringify({
-        scale: { pixelsPerMeter: 40, source: "auto" },
+        units_per_meter: 1000,
+        unit_source: "header:insunits=4",
+        viewport: {
+          min_x: 0,
+          min_y: 0,
+          max_x: 4000,
+          max_y: 3000,
+          width: 4000,
+          height: 3000
+        },
         walls: [
-          { start: { x: 20, y: 20 }, end: { x: 20, y: 160 } },
-          { start: { x: 220, y: 20 }, end: { x: 220, y: 160 } },
-          { start: { x: 20, y: 160 }, end: { x: 220, y: 160 } },
-          { start: { x: 20, y: 20 }, end: { x: 90, y: 20 } }
+          {
+            id: "wall-1",
+            start: { x: 0, y: 0 },
+            end: { x: 4000, y: 0 }
+          },
+          {
+            id: "wall-2",
+            start: { x: 4000, y: 0 },
+            end: { x: 4000, y: 3000 }
+          }
         ],
-        doors: [{ start: { x: 90, y: 20 }, end: { x: 150, y: 20 } }],
-        confidence_items: [
+        doors: [
+          {
+            id: "door-1",
+            start: { x: 1600, y: 0 },
+            end: { x: 2500, y: 0 }
+          }
+        ],
+        warnings: [
+          {
+            id: "unsupported-entity-1",
+            message: "暂不支持的实体类型 TEXT，已跳过。",
+            severity: "warning"
+          }
+        ]
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    )
+  );
+
+  vi.stubGlobal("fetch", fetchMock);
+
+  const { container } = render(<WorkbenchPage />);
+  const input = screen.getByLabelText("上传DWG文件");
+  const file = new File(["demo"], "simple_room.dwg", { type: "application/acad" });
+
+  fireEvent.change(input, { target: { files: [file] } });
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("导入状态")).toHaveValue("已导入");
+  });
+  expect(screen.getByLabelText("当前DWG文件")).toHaveValue("simple_room.dwg");
+  expect(await screen.findByLabelText("当前标定")).toHaveValue("1000");
+  expect(container.querySelectorAll("[data-segment-id]").length).toBeGreaterThan(0);
+});
+
+test("shows cad unit calibration and import warnings after dwg import", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        units_per_meter: 40,
+        unit_source: "header:insunits=4",
+        viewport: {
+          min_x: 0,
+          min_y: 0,
+          max_x: 240,
+          max_y: 160,
+          width: 240,
+          height: 160
+        },
+        walls: [
+          {
+            id: "wall-1",
+            start: { x: 20, y: 20 },
+            end: { x: 20, y: 160 }
+          },
+          {
+            id: "wall-2",
+            start: { x: 220, y: 20 },
+            end: { x: 220, y: 160 }
+          },
+          {
+            id: "wall-3",
+            start: { x: 20, y: 160 },
+            end: { x: 220, y: 160 }
+          },
+          {
+            id: "wall-4",
+            start: { x: 20, y: 20 },
+            end: { x: 90, y: 20 }
+          }
+        ],
+        doors: [
+          {
+            id: "door-1",
+            start: { x: 90, y: 20 },
+            end: { x: 150, y: 20 }
+          }
+        ],
+        warnings: [
           {
             id: "structure-review",
-            message: "请确认自动识别的墙体和门洞位置。",
+            message: "请确认导入的墙体和门洞位置。",
             severity: "warning"
           }
         ]
@@ -92,16 +158,18 @@ test("uploads a plan file and applies recognition suggestions with fallback hint
   vi.stubGlobal("fetch", fetchMock);
 
   render(<WorkbenchPage />);
-  const input = screen.getByLabelText("上传图纸文件");
-  const file = new File(["demo"], "floor.png", { type: "image/png" });
+  const input = screen.getByLabelText("上传DWG文件");
+  const file = new File(["demo"], "floor.dwg", { type: "application/acad" });
 
   fireEvent.change(input, { target: { files: [file] } });
 
-  expect(await screen.findByLabelText("识别状态")).toHaveValue("已识别");
-  expect(await screen.findByLabelText("当前标定")).toHaveValue("40");
-  expect(await screen.findByLabelText("墙体数量")).toHaveValue("4");
-  expect(await screen.findByLabelText("门洞数量")).toHaveValue("1");
-  expect(await screen.findByLabelText("待确认项数量")).toHaveValue("1");
+  await waitFor(() => {
+    expect(screen.getByLabelText("导入状态")).toHaveValue("已导入");
+  });
+  expect(screen.getByLabelText("当前标定")).toHaveValue("40");
+  expect(screen.getByLabelText("导入警告数量")).toHaveValue("1");
+  expect(screen.getByLabelText("墙体数量")).toHaveValue("4");
+  expect(screen.getByLabelText("门洞数量")).toHaveValue("1");
 });
 
 test("keeps camera ids unique after delete and re-add", () => {
@@ -139,84 +207,139 @@ test("keeps camera ids unique after delete and re-add", () => {
 });
 
 test("recalculates layout when coverage distance changes and renders solver results", async () => {
-  vi.stubGlobal("URL", {
-    createObjectURL: vi.fn(() => "blob:floor-plan"),
-    revokeObjectURL: vi.fn()
-  });
-
-  const fetchMock = vi.fn().mockResolvedValue(
-    new Response(
-      JSON.stringify({
-        recommended_camera_count: 2,
-        coverage_ratio: 0.875,
-        blind_spots: [{ x: 24, y: 48 }],
-        overlap_hints: [{ x: 180, y: 120 }],
-        cameras: [
-          {
-            id: "CAM-01",
-            mode: "directional",
-            position: { x: 80, y: 100 },
-            direction_deg: 0,
-            coverage_polygon: [
-              { x: 80, y: 100 },
-              { x: 150, y: 70 },
-              { x: 180, y: 100 },
-              { x: 150, y: 130 }
-            ]
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          units_per_meter: 40,
+          unit_source: "header:insunits=4",
+          viewport: {
+            min_x: 0,
+            min_y: 0,
+            max_x: 240,
+            max_y: 160,
+            width: 240,
+            height: 160
           },
-          {
-            id: "CAM-02",
-            mode: "panoramic",
-            position: { x: 220, y: 160 },
-            direction_deg: null,
-            coverage_polygon: [
-              { x: 220, y: 80 },
-              { x: 280, y: 120 },
-              { x: 280, y: 200 },
-              { x: 220, y: 240 }
-            ]
-          }
-        ]
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      }
+          walls: [
+            { id: "wall-1", start: { x: 20, y: 20 }, end: { x: 20, y: 160 } },
+            { id: "wall-2", start: { x: 220, y: 20 }, end: { x: 220, y: 160 } }
+          ],
+          doors: [{ id: "door-1", start: { x: 90, y: 20 }, end: { x: 150, y: 20 } }],
+          warnings: []
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
     )
-  );
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          recommended_camera_count: 2,
+          coverage_ratio: 0.875,
+          blind_spots: [{ x: 24, y: 48 }],
+          overlap_hints: [{ x: 180, y: 120 }],
+          cameras: [
+            {
+              id: "CAM-01",
+              mode: "directional",
+              position: { x: 80, y: 100 },
+              direction_deg: 0,
+              coverage_polygon: [
+                { x: 80, y: 100 },
+                { x: 150, y: 70 },
+                { x: 180, y: 100 },
+                { x: 150, y: 130 }
+              ]
+            },
+            {
+              id: "CAM-02",
+              mode: "panoramic",
+              position: { x: 220, y: 160 },
+              direction_deg: null,
+              coverage_polygon: [
+                { x: 220, y: 80 },
+                { x: 280, y: 120 },
+                { x: 280, y: 200 },
+                { x: 220, y: 240 }
+              ]
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
+    );
 
   vi.stubGlobal("fetch", fetchMock);
 
-  const { container } = render(<WorkbenchPage />);
+  render(<WorkbenchPage />);
 
-  fireEvent.change(screen.getByLabelText("手工标定像素每米"), {
+  fireEvent.change(screen.getByLabelText("上传DWG文件"), {
+    target: { files: [new File(["dwg"], "simple_room.dwg", { type: "application/acad" })] }
+  });
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("导入状态")).toHaveValue("已导入");
+  });
+
+  fireEvent.change(screen.getByLabelText("手工标定图纸单位每米"), {
     target: { value: "30" }
   });
+  confirmRegionPolygon();
   fireEvent.change(screen.getByLabelText("覆盖距离滑块"), {
     target: { value: "10" }
   });
   fireEvent.click(screen.getByRole("button", { name: "重新计算" }));
 
-  expect(fetchMock).toHaveBeenCalledWith(
-    "/api/layout/solve",
-    expect.objectContaining({
-      method: "POST"
-    })
-  );
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/layout/solve",
+      expect.objectContaining({
+        method: "POST"
+      })
+    );
+  });
 
-  expect(await screen.findByLabelText("建议摄像头数量")).toHaveValue("2");
-  expect(await screen.findByLabelText("覆盖率")).toHaveValue("87.5%");
-  expect(container.querySelectorAll("[data-coverage-camera-id]")).toHaveLength(2);
+  expect(screen.getByLabelText("建议摄像头数量")).toHaveValue("2");
+  expect(screen.getByLabelText("覆盖率")).toHaveValue("87.5%");
+  expect(document.querySelectorAll("[data-coverage-camera-id]")).toHaveLength(2);
 });
 
 test("keeps a locked camera position when recalculating layout", async () => {
-  vi.stubGlobal("URL", {
-    createObjectURL: vi.fn(() => "blob:floor-plan"),
-    revokeObjectURL: vi.fn()
-  });
-
   const fetchMock = vi
     .fn()
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          units_per_meter: 40,
+          unit_source: "header:insunits=4",
+          viewport: {
+            min_x: 0,
+            min_y: 0,
+            max_x: 240,
+            max_y: 160,
+            width: 240,
+            height: 160
+          },
+          walls: [
+            { id: "wall-1", start: { x: 20, y: 20 }, end: { x: 20, y: 160 } },
+            { id: "wall-2", start: { x: 220, y: 20 }, end: { x: 220, y: 160 } }
+          ],
+          doors: [{ id: "door-1", start: { x: 90, y: 20 }, end: { x: 150, y: 20 } }],
+          warnings: []
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
+    )
     .mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -298,47 +421,90 @@ test("keeps a locked camera position when recalculating layout", async () => {
 
   const { container } = render(<WorkbenchPage />);
 
-  fireEvent.change(screen.getByLabelText("手工标定像素每米"), {
+  fireEvent.change(screen.getByLabelText("上传DWG文件"), {
+    target: { files: [new File(["dwg"], "simple_room.dwg", { type: "application/acad" })] }
+  });
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("导入状态")).toHaveValue("已导入");
+  });
+
+  fireEvent.change(screen.getByLabelText("手工标定图纸单位每米"), {
     target: { value: "30" }
   });
+  confirmRegionPolygon();
   fireEvent.click(screen.getByRole("button", { name: "重新计算" }));
 
-  const firstCamera = await screen.findByLabelText("建议摄像头数量");
-  expect(firstCamera).toHaveValue("2");
+  await waitFor(() => {
+    expect(screen.getByLabelText("建议摄像头数量")).toHaveValue("2");
+  });
 
   fireEvent.click(container.querySelector('[data-camera-id="CAM-01"]') as Element);
   fireEvent.click(screen.getByRole("button", { name: "锁定当前相机" }));
   fireEvent.click(screen.getByRole("button", { name: "重新计算" }));
 
   const lockedCamera = container.querySelector('[data-camera-id="CAM-01"]');
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
   expect(lockedCamera?.getAttribute("cx")).toBe("80");
   expect(lockedCamera?.getAttribute("cy")).toBe("100");
 });
 
 test("exports the current plan bundle and shows generated paths", async () => {
-  vi.stubGlobal("URL", {
-    createObjectURL: vi.fn(() => "blob:floor-plan"),
-    revokeObjectURL: vi.fn()
-  });
-
-  const fetchMock = vi.fn().mockResolvedValue(
-    new Response(
-      JSON.stringify({
-        project_path: "/tmp/demo-project/project.camera-plan.json",
-        png_path: "/tmp/demo-project/annotated-plan.png",
-        pdf_path: "/tmp/demo-project/annotated-plan.pdf"
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      }
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          units_per_meter: 40,
+          unit_source: "header:insunits=4",
+          viewport: {
+            min_x: 0,
+            min_y: 0,
+            max_x: 240,
+            max_y: 160,
+            width: 240,
+            height: 160
+          },
+          walls: [
+            { id: "wall-1", start: { x: 20, y: 20 }, end: { x: 20, y: 160 } },
+            { id: "wall-2", start: { x: 220, y: 20 }, end: { x: 220, y: 160 } }
+          ],
+          doors: [{ id: "door-1", start: { x: 90, y: 20 }, end: { x: 150, y: 20 } }],
+          warnings: []
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
     )
-  );
+    .mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          project_path: "/tmp/demo-project/project.camera-plan.json",
+          png_path: "/tmp/demo-project/annotated-plan.png",
+          pdf_path: "/tmp/demo-project/annotated-plan.pdf"
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
+    );
 
   vi.stubGlobal("fetch", fetchMock);
 
   render(<WorkbenchPage />);
+
+  fireEvent.change(screen.getByLabelText("上传DWG文件"), {
+    target: { files: [new File(["dwg"], "simple_room.dwg", { type: "application/acad" })] }
+  });
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("导入状态")).toHaveValue("已导入");
+  });
 
   fireEvent.click(screen.getByRole("button", { name: "导出成果" }));
 

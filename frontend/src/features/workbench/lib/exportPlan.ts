@@ -1,10 +1,10 @@
-import type { CameraModeDto, LayoutResultDto, PointDto, SegmentDto } from "../types";
-
-
-interface ExportUploadAsset {
-  kind: "image" | "pdf";
-  url: string;
-}
+import type {
+  CameraModeDto,
+  DwgImportViewportDto,
+  LayoutResultDto,
+  PointDto,
+  SegmentDto
+} from "../types";
 
 interface ExportPlanCamera {
   id: string;
@@ -14,7 +14,7 @@ interface ExportPlanCamera {
 }
 
 interface ExportPlanOptions {
-  upload: ExportUploadAsset | null;
+  viewport: DwgImportViewportDto | null;
   walls: SegmentDto[];
   doors: SegmentDto[];
   cameras: ExportPlanCamera[];
@@ -22,16 +22,6 @@ interface ExportPlanOptions {
   width: number;
   height: number;
 }
-
-
-function escapeXml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
 
 function labelMap(cameras: ExportPlanCamera[]) {
   return new Map(cameras.map((camera, index) => [camera.id, `CAM-${String(index + 1).padStart(2, "0")}`]));
@@ -85,17 +75,66 @@ function cameraMarkup(cameras: ExportPlanCamera[]) {
     .join("");
 }
 
+function collectPoints(options: ExportPlanOptions) {
+  const points: PointDto[] = [];
+
+  for (const segment of options.walls) {
+    points.push(segment.start, segment.end);
+  }
+
+  for (const segment of options.doors) {
+    points.push(segment.start, segment.end);
+  }
+
+  for (const camera of options.cameras) {
+    points.push({ x: camera.x, y: camera.y });
+  }
+
+  for (const point of options.layoutResult?.blindSpots ?? []) {
+    points.push(point);
+  }
+
+  for (const point of options.layoutResult?.overlapHints ?? []) {
+    points.push(point);
+  }
+
+  return points;
+}
+
+function resolveViewport(options: ExportPlanOptions): DwgImportViewportDto {
+  if (options.viewport) {
+    return options.viewport;
+  }
+
+  const points = collectPoints(options);
+  if (!points.length) {
+    return {
+      minX: 0,
+      minY: 0,
+      maxX: options.width,
+      maxY: options.height,
+      width: options.width,
+      height: options.height
+    };
+  }
+
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const width = Math.max(maxX - minX, 1);
+  const height = Math.max(maxY - minY, 1);
+
+  return { minX, minY, maxX, maxY, width, height };
+}
+
 
 function buildSvg(options: ExportPlanOptions) {
-  const background =
-    options.upload?.kind === "image"
-      ? `<image href="${escapeXml(options.upload.url)}" x="0" y="0" width="${options.width}" height="${options.height}" preserveAspectRatio="xMidYMid meet" />`
-      : "";
+  const viewport = resolveViewport(options);
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${options.width}" height="${options.height}" viewBox="0 0 ${options.width} ${options.height}">`,
-    `<rect width="${options.width}" height="${options.height}" fill="#ffffff" />`,
-    background,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${options.width}" height="${options.height}" viewBox="${viewport.minX} ${viewport.minY} ${viewport.width} ${viewport.height}">`,
+    `<rect x="${viewport.minX}" y="${viewport.minY}" width="${viewport.width}" height="${viewport.height}" fill="#ffffff" />`,
     polygonMarkup(options.layoutResult),
     pointCloudMarkup(options.layoutResult?.blindSpots ?? [], "rgba(220,38,38,0.88)"),
     pointCloudMarkup(options.layoutResult?.overlapHints ?? [], "rgba(245,158,11,0.82)"),
